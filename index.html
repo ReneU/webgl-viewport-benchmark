@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Performance: Viewport vs Resize</title>
+    <style>
+        :root {
+            --bg: #0b0e14;
+            --panel: #121722;
+            --muted: #9aa4b2;
+            --text: #e6edf3;
+            --accent: #5b9cf0;
+            --warn: #ffb86b;
+            --error: #ff6b6b;
+            --ok: #79c26a;
+            --border: #202737;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+            line-height: 1.45;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 32px auto 80px;
+            padding: 0 16px;
+        }
+        h1 {
+            margin: 0 0 8px;
+            font-size: 22px;
+            font-weight: 600;
+        }
+        .subtle { color: var(--muted); font-size: 14px; }
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+        }
+        label {
+            display: block;
+            margin: 10px 0 6px;
+            color: var(--muted);
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        select, input[type="number"] {
+            background: #0f1420;
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 8px 10px;
+            border-radius: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        button {
+            background: #192234;
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            flex: 1;
+            white-space: nowrap;
+        }
+        button.primary { background: #23406f; border-color: #2a4d87; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .kv { display: grid; grid-template-columns: 1fr auto; gap: 6px 12px; }
+        .kv .k { color: var(--muted); }
+        .kv .v { font-variant-numeric: tabular-nums; }
+        .mono { 
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; 
+        }
+        .progress-bar {
+            background: #0f1420;
+            border: 1px solid var(--border);
+            height: 32px;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 16px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--ok), var(--accent));
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        .chart-container {
+            background: #0f1420;
+            border: 1px solid var(--border);
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 16px;
+        }
+        .bar-chart {
+            display: flex;
+            gap: 20px;
+            align-items: flex-end;
+            height: 180px;
+            margin-top: 16px;
+        }
+        .bar {
+            flex: 1;
+            background: linear-gradient(to top, var(--ok), var(--accent));
+            border-radius: 5px 5px 0 0;
+            position: relative;
+            transition: height 0.5s;
+            min-height: 5px;
+        }
+        .bar.resize-bar {
+            background: linear-gradient(to top, var(--error), var(--warn));
+        }
+        .bar-label {
+            position: absolute;
+            bottom: -40px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.2;
+        }
+        .bar-value {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .winner {
+            background: rgba(121, 194, 106, 0.15);
+            border: 1px solid rgba(121, 194, 106, 0.3);
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            margin-top: 16px;
+        }
+        .good { color: var(--ok); }
+        .bad { color: var(--error); }
+        canvas { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebGL Performance: Viewport vs Resize</h1>
+        <div class="subtle">Compare rendering performance using viewport() vs canvas resizing</div>
+
+        <div class="grid" style="margin-top: 16px;">
+            <div class="panel">
+                <div class="row" style="justify-content: space-between; align-items: baseline;">
+                    <div class="subtle">Test Configuration</div>
+                    <div class="subtle mono" id="deviceType">-</div>
+                </div>
+
+                <label>Test Scenario</label>
+                <select id="scenario">
+                    <option value="thumbnails">Multiple Thumbnails (256x256)</option>
+                    <option value="mixed">Mixed Sizes (256, 512, 1024)</option>
+                    <option value="large">Large Outputs (1024x1024)</option>
+                    <option value="extreme">Extreme Range (128 to 2048)</option>
+                </select>
+
+                <label>Renders per Test</label>
+                <input type="number" id="renderCount" value="100" min="10" max="1000">
+
+                <label>Scene Complexity</label>
+                <select id="complexity">
+                    <option value="simple">Simple (1 triangle)</option>
+                    <option value="medium">Medium (100 triangles)</option>
+                    <option value="complex">Complex (1000 triangles)</option>
+                </select>
+
+                <div class="row" style="margin-top: 12px;">
+                    <button class="primary" id="runTest">Run Test</button>
+                    <button id="stopTest" disabled>Stop</button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <div class="subtle">Device Information</div>
+                <div class="kv" style="margin-top: 8px;">
+                    <div class="k">GPU</div><div class="v mono" id="gpuRenderer">-</div>
+                    <div class="k">Vendor</div><div class="v mono" id="gpuVendor">-</div>
+                    <div class="k">Max Texture Size</div><div class="v mono" id="maxTexSize">-</div>
+                    <div class="k">Device Type</div><div class="v mono" id="deviceInfo">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressBar">0%</div>
+        </div>
+
+        <div id="resultsContainer"></div>
+    </div>
+
+    <canvas id="glCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('glCanvas');
+        const gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
+        
+        let stopRequested = false;
+        let testRunning = false;
+
+        // Detect device info
+        function detectDevice() {
+            const info = gl.getExtension('WEBGL_debug_renderer_info');
+            const renderer = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+            const vendor = info ? gl.getParameter(info.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR);
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+            
+            document.getElementById('gpuRenderer').textContent = renderer || 'Unknown';
+            document.getElementById('gpuVendor').textContent = vendor || 'Unknown';
+            document.getElementById('maxTexSize').textContent = gl.getParameter(gl.MAX_TEXTURE_SIZE) + 'px';
+            document.getElementById('deviceInfo').textContent = isMobile ? 'Mobile' : 'Desktop';
+            document.getElementById('deviceType').textContent = isMobile ? 'Mobile Device' : 'Desktop';
+        }
+
+        // Shader setup
+        const vsSource = `
+            attribute vec2 a_position;
+            attribute vec3 a_color;
+            varying vec3 v_color;
+            void main() {
+                gl_Position = vec4(a_position, 0.0, 1.0);
+                v_color = a_color;
+            }
+        `;
+
+        const fsSource = `
+            precision mediump float;
+            varying vec3 v_color;
+            void main() {
+                gl_FragColor = vec4(v_color, 1.0);
+            }
+        `;
+
+        function createShader(type, source) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            return shader;
+        }
+
+        const program = gl.createProgram();
+        gl.attachShader(program, createShader(gl.VERTEX_SHADER, vsSource));
+        gl.attachShader(program, createShader(gl.FRAGMENT_SHADER, fsSource));
+        gl.linkProgram(program);
+        gl.useProgram(program);
+
+        const positionLoc = gl.getAttribLocation(program, 'a_position');
+        const colorLoc = gl.getAttribLocation(program, 'a_color');
+
+        let geometryBuffer, colorBuffer;
+
+        function createGeometry(complexity) {
+            let triangleCount = 1;
+            if (complexity === 'medium') triangleCount = 100;
+            if (complexity === 'complex') triangleCount = 1000;
+
+            const positions = [];
+            const colors = [];
+
+            for (let i = 0; i < triangleCount; i++) {
+                const x = (Math.random() - 0.5) * 1.5;
+                const y = (Math.random() - 0.5) * 1.5;
+                const size = 0.1 + Math.random() * 0.1;
+
+                positions.push(
+                    x, y + size,
+                    x - size, y - size,
+                    x + size, y - size
+                );
+
+                const r = Math.random();
+                const g = Math.random();
+                const b = Math.random();
+                colors.push(r, g, b, r, g, b, r, g, b);
+            }
+
+            geometryBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, geometryBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+            colorBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+
+            return positions.length / 2;
+        }
+
+        function renderScene(vertexCount) {
+            gl.clear(gl.COLOR_BUFFER_BIT);
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, geometryBuffer);
+            gl.enableVertexAttribArray(positionLoc);
+            gl.vertexAttribPointer(positionLoc, 2, gl.FLOAT, false, 0, 0);
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+            gl.enableVertexAttribArray(colorLoc);
+            gl.vertexAttribPointer(colorLoc, 3, gl.FLOAT, false, 0, 0);
+            
+            gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
+        }
+
+        async function testViewportApproach(sizes, renderCount, vertexCount) {
+            const maxSize = Math.max(...sizes);
+            canvas.width = maxSize;
+            canvas.height = maxSize;
+            gl.viewport(0, 0, maxSize, maxSize);
+
+            const times = [];
+            let totalMemory = 0;
+
+            for (let i = 0; i < renderCount && !stopRequested; i++) {
+                const size = sizes[i % sizes.length];
+                
+                const start = performance.now();
+                
+                gl.viewport(0, 0, size, size);
+                renderScene(vertexCount);
+                gl.finish();
+                
+                const end = performance.now();
+                times.push(end - start);
+
+                if (performance.memory) {
+                    totalMemory += performance.memory.usedJSHeapSize;
+                }
+
+                if (i % 10 === 0) {
+                    updateProgress((i / renderCount) * 50);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            return {
+                times,
+                avgMemory: totalMemory / renderCount
+            };
+        }
+
+        async function testResizeApproach(sizes, renderCount, vertexCount) {
+            const times = [];
+            let totalMemory = 0;
+
+            for (let i = 0; i < renderCount && !stopRequested; i++) {
+                const size = sizes[i % sizes.length];
+                
+                const start = performance.now();
+                
+                canvas.width = size;
+                canvas.height = size;
+                gl.viewport(0, 0, size, size);
+                renderScene(vertexCount);
+                gl.finish();
+                
+                const end = performance.now();
+                times.push(end - start);
+
+                if (performance.memory) {
+                    totalMemory += performance.memory.usedJSHeapSize;
+                }
+
+                if (i % 10 === 0) {
+                    updateProgress(50 + (i / renderCount) * 50);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+
+            return {
+                times,
+                avgMemory: totalMemory / renderCount
+            };
+        }
+
+        function calculateStats(times) {
+            const sorted = [...times].sort((a, b) => a - b);
+            const sum = times.reduce((a, b) => a + b, 0);
+            return {
+                min: sorted[0],
+                max: sorted[sorted.length - 1],
+                avg: sum / times.length,
+                median: sorted[Math.floor(sorted.length / 2)],
+                p95: sorted[Math.floor(sorted.length * 0.95)],
+                p99: sorted[Math.floor(sorted.length * 0.99)]
+            };
+        }
+
+        function updateProgress(percent) {
+            const bar = document.getElementById('progressBar');
+            bar.style.width = percent + '%';
+            bar.textContent = Math.round(percent) + '%';
+        }
+
+        function displayResults(viewportResults, resizeResults) {
+            const vStats = calculateStats(viewportResults.times);
+            const rStats = calculateStats(resizeResults.times);
+
+            const winner = vStats.avg < rStats.avg ? 'Viewport' : 'Resize';
+            const improvement = Math.abs((1 - Math.min(vStats.avg, rStats.avg) / Math.max(vStats.avg, rStats.avg)) * 100);
+
+            const resultsHTML = `
+                <div class="grid">
+                    <div class="panel">
+                        <div class="subtle">Viewport Approach</div>
+                        <div class="kv" style="margin-top: 8px;">
+                            <div class="k">Average Time</div><div class="v mono">${vStats.avg.toFixed(2)} ms</div>
+                            <div class="k">Median Time</div><div class="v mono">${vStats.median.toFixed(2)} ms</div>
+                            <div class="k">95th Percentile</div><div class="v mono">${vStats.p95.toFixed(2)} ms</div>
+                            <div class="k">99th Percentile</div><div class="v mono">${vStats.p99.toFixed(2)} ms</div>
+                            <div class="k">Min / Max</div><div class="v mono">${vStats.min.toFixed(2)} / ${vStats.max.toFixed(2)} ms</div>
+                            ${performance.memory ? `<div class="k">Avg Memory</div><div class="v mono">${(viewportResults.avgMemory / 1024 / 1024).toFixed(2)} MB</div>` : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="panel">
+                        <div class="subtle">Resize Approach</div>
+                        <div class="kv" style="margin-top: 8px;">
+                            <div class="k">Average Time</div><div class="v mono">${rStats.avg.toFixed(2)} ms</div>
+                            <div class="k">Median Time</div><div class="v mono">${rStats.median.toFixed(2)} ms</div>
+                            <div class="k">95th Percentile</div><div class="v mono">${rStats.p95.toFixed(2)} ms</div>
+                            <div class="k">99th Percentile</div><div class="v mono">${rStats.p99.toFixed(2)} ms</div>
+                            <div class="k">Min / Max</div><div class="v mono">${rStats.min.toFixed(2)} / ${rStats.max.toFixed(2)} ms</div>
+                            ${performance.memory ? `<div class="k">Avg Memory</div><div class="v mono">${(resizeResults.avgMemory / 1024 / 1024).toFixed(2)} MB</div>` : ''}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="winner">
+                    ${winner} approach wins — ${improvement.toFixed(1)}% faster on average
+                </div>
+
+                <div class="panel chart-container">
+                    <div class="subtle">Performance Comparison (Lower is Better)</div>
+                    <div class="bar-chart">
+                        <div class="bar" style="height: ${(vStats.avg / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
+                            <div class="bar-value">${vStats.avg.toFixed(1)}ms</div>
+                            <div class="bar-label">Viewport<br>Average</div>
+                        </div>
+                        <div class="bar resize-bar" style="height: ${(rStats.avg / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
+                            <div class="bar-value">${rStats.avg.toFixed(1)}ms</div>
+                            <div class="bar-label">Resize<br>Average</div>
+                        </div>
+                        <div class="bar" style="height: ${(vStats.p95 / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
+                            <div class="bar-value">${vStats.p95.toFixed(1)}ms</div>
+                            <div class="bar-label">Viewport<br>95th %ile</div>
+                        </div>
+                        <div class="bar resize-bar" style="height: ${(rStats.p95 / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
+                            <div class="bar-value">${rStats.p95.toFixed(1)}ms</div>
+                            <div class="bar-label">Resize<br>95th %ile</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            document.getElementById('resultsContainer').innerHTML = resultsHTML;
+        }
+
+        document.getElementById('runTest').addEventListener('click', async () => {
+            if (testRunning) return;
+            
+            testRunning = true;
+            stopRequested = false;
+            document.getElementById('runTest').disabled = true;
+            document.getElementById('stopTest').disabled = false;
+            document.getElementById('resultsContainer').innerHTML = '';
+
+            const scenario = document.getElementById('scenario').value;
+            const renderCount = parseInt(document.getElementById('renderCount').value);
+            const complexity = document.getElementById('complexity').value;
+
+            let sizes = [];
+            switch(scenario) {
+                case 'thumbnails': sizes = [256, 256, 256, 256]; break;
+                case 'mixed': sizes = [256, 512, 1024]; break;
+                case 'large': sizes = [1024, 1024]; break;
+                case 'extreme': sizes = [128, 256, 512, 1024, 2048]; break;
+            }
+
+            const vertexCount = createGeometry(complexity);
+
+            updateProgress(0);
+
+            try {
+                const viewportResults = await testViewportApproach(sizes, renderCount, vertexCount);
+                
+                if (!stopRequested) {
+                    const resizeResults = await testResizeApproach(sizes, renderCount, vertexCount);
+                    
+                    if (!stopRequested) {
+                        displayResults(viewportResults, resizeResults);
+                        updateProgress(100);
+                    }
+                }
+            } catch (error) {
+                console.error('Test error:', error);
+                alert('Test failed: ' + error.message);
+            }
+
+            testRunning = false;
+            document.getElementById('runTest').disabled = false;
+            document.getElementById('stopTest').disabled = true;
+        });
+
+        document.getElementById('stopTest').addEventListener('click', () => {
+            stopRequested = true;
+            document.getElementById('stopTest').disabled = true;
+        });
+
+        detectDevice();
+    </script>
+</body>
+</html>
