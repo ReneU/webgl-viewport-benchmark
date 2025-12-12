@@ -200,7 +200,6 @@
                 <div class="kv" style="margin-top: 8px;">
                     <div class="k">GPU</div><div class="v mono" id="gpuRenderer">-</div>
                     <div class="k">Vendor</div><div class="v mono" id="gpuVendor">-</div>
-                    <div class="k">Max Texture Size</div><div class="v mono" id="maxTexSize">-</div>
                     <div class="k">Device Type</div><div class="v mono" id="deviceInfo">-</div>
                 </div>
             </div>
@@ -231,7 +230,6 @@
             
             document.getElementById('gpuRenderer').textContent = renderer || 'Unknown';
             document.getElementById('gpuVendor').textContent = vendor || 'Unknown';
-            document.getElementById('maxTexSize').textContent = gl.getParameter(gl.MAX_TEXTURE_SIZE) + 'px';
             document.getElementById('deviceInfo').textContent = isMobile ? 'Mobile' : 'Desktop';
             document.getElementById('deviceType').textContent = isMobile ? 'Mobile Device' : 'Desktop';
         }
@@ -330,7 +328,6 @@
             gl.viewport(0, 0, maxSize, maxSize);
 
             const times = [];
-            let totalMemory = 0;
 
             for (let i = 0; i < renderCount && !stopRequested; i++) {
                 const size = sizes[i % sizes.length];
@@ -344,25 +341,17 @@
                 const end = performance.now();
                 times.push(end - start);
 
-                if (performance.memory) {
-                    totalMemory += performance.memory.usedJSHeapSize;
-                }
-
                 if (i % 10 === 0) {
                     updateProgress((i / renderCount) * 50);
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
 
-            return {
-                times,
-                avgMemory: totalMemory / renderCount
-            };
+            return times;
         }
 
         async function testResizeApproach(sizes, renderCount, vertexCount) {
             const times = [];
-            let totalMemory = 0;
 
             for (let i = 0; i < renderCount && !stopRequested; i++) {
                 const size = sizes[i % sizes.length];
@@ -378,20 +367,13 @@
                 const end = performance.now();
                 times.push(end - start);
 
-                if (performance.memory) {
-                    totalMemory += performance.memory.usedJSHeapSize;
-                }
-
                 if (i % 10 === 0) {
                     updateProgress(50 + (i / renderCount) * 50);
                     await new Promise(r => setTimeout(r, 0));
                 }
             }
 
-            return {
-                times,
-                avgMemory: totalMemory / renderCount
-            };
+            return times;
         }
 
         function calculateStats(times) {
@@ -413,9 +395,9 @@
             bar.textContent = Math.round(percent) + '%';
         }
 
-        function displayResults(viewportResults, resizeResults) {
-            const vStats = calculateStats(viewportResults.times);
-            const rStats = calculateStats(resizeResults.times);
+        function displayResults(viewportTimes, resizeTimes) {
+            const vStats = calculateStats(viewportTimes);
+            const rStats = calculateStats(resizeTimes);
 
             const winner = vStats.avg < rStats.avg ? 'Viewport' : 'Resize';
             const improvement = Math.abs((1 - Math.min(vStats.avg, rStats.avg) / Math.max(vStats.avg, rStats.avg)) * 100);
@@ -425,24 +407,22 @@
                     <div class="panel">
                         <div class="subtle">Viewport Approach</div>
                         <div class="kv" style="margin-top: 8px;">
-                            <div class="k">Average Time</div><div class="v mono">${vStats.avg.toFixed(2)} ms</div>
-                            <div class="k">Median Time</div><div class="v mono">${vStats.median.toFixed(2)} ms</div>
-                            <div class="k">95th Percentile</div><div class="v mono">${vStats.p95.toFixed(2)} ms</div>
-                            <div class="k">99th Percentile</div><div class="v mono">${vStats.p99.toFixed(2)} ms</div>
-                            <div class="k">Min / Max</div><div class="v mono">${vStats.min.toFixed(2)} / ${vStats.max.toFixed(2)} ms</div>
-                            ${performance.memory ? `<div class="k">Avg Memory</div><div class="v mono">${(viewportResults.avgMemory / 1024 / 1024).toFixed(2)} MB</div>` : ''}
+                            <div class="k">Average Time</div><div class="v mono">${vStats.avg.toFixed(4)} ms</div>
+                            <div class="k">Median Time</div><div class="v mono">${vStats.median.toFixed(4)} ms</div>
+                            <div class="k">95th Percentile</div><div class="v mono">${vStats.p95.toFixed(4)} ms</div>
+                            <div class="k">99th Percentile</div><div class="v mono">${vStats.p99.toFixed(4)} ms</div>
+                            <div class="k">Min / Max</div><div class="v mono">${vStats.min.toFixed(4)} / ${vStats.max.toFixed(4)} ms</div>
                         </div>
                     </div>
                     
                     <div class="panel">
                         <div class="subtle">Resize Approach</div>
                         <div class="kv" style="margin-top: 8px;">
-                            <div class="k">Average Time</div><div class="v mono">${rStats.avg.toFixed(2)} ms</div>
-                            <div class="k">Median Time</div><div class="v mono">${rStats.median.toFixed(2)} ms</div>
-                            <div class="k">95th Percentile</div><div class="v mono">${rStats.p95.toFixed(2)} ms</div>
-                            <div class="k">99th Percentile</div><div class="v mono">${rStats.p99.toFixed(2)} ms</div>
-                            <div class="k">Min / Max</div><div class="v mono">${rStats.min.toFixed(2)} / ${rStats.max.toFixed(2)} ms</div>
-                            ${performance.memory ? `<div class="k">Avg Memory</div><div class="v mono">${(resizeResults.avgMemory / 1024 / 1024).toFixed(2)} MB</div>` : ''}
+                            <div class="k">Average Time</div><div class="v mono">${rStats.avg.toFixed(4)} ms</div>
+                            <div class="k">Median Time</div><div class="v mono">${rStats.median.toFixed(4)} ms</div>
+                            <div class="k">95th Percentile</div><div class="v mono">${rStats.p95.toFixed(4)} ms</div>
+                            <div class="k">99th Percentile</div><div class="v mono">${rStats.p99.toFixed(4)} ms</div>
+                            <div class="k">Min / Max</div><div class="v mono">${rStats.min.toFixed(4)} / ${rStats.max.toFixed(4)} ms</div>
                         </div>
                     </div>
                 </div>
@@ -503,13 +483,13 @@
             updateProgress(0);
 
             try {
-                const viewportResults = await testViewportApproach(sizes, renderCount, vertexCount);
+                const viewportTimes = await testViewportApproach(sizes, renderCount, vertexCount);
                 
                 if (!stopRequested) {
-                    const resizeResults = await testResizeApproach(sizes, renderCount, vertexCount);
+                    const resizeTimes = await testResizeApproach(sizes, renderCount, vertexCount);
                     
                     if (!stopRequested) {
-                        displayResults(viewportResults, resizeResults);
+                        displayResults(viewportTimes, resizeTimes);
                         updateProgress(100);
                     }
                 }
