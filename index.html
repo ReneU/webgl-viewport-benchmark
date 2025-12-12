@@ -154,6 +154,15 @@
             font-weight: 600;
             margin-top: 16px;
         }
+        .draw {
+            background: rgba(194, 194, 106, 0.15);
+            border: 1px solid rgba(194, 194, 106, 0.3);
+            padding: 16px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 600;
+            margin-top: 16px;
+        }
         .good { color: var(--ok); }
         .bad { color: var(--error); }
         canvas { display: none; }
@@ -400,6 +409,7 @@
             const rStats = calculateStats(resizeTimes);
 
             const winner = vStats.avg < rStats.avg ? 'Viewport' : 'Resize';
+            const isDraw = Math.abs(vStats.avg - rStats.avg) < 1;
             const improvement = Math.abs((1 - Math.min(vStats.avg, rStats.avg) / Math.max(vStats.avg, rStats.avg)) * 100);
 
             const resultsHTML = `
@@ -427,27 +437,27 @@
                     </div>
                 </div>
 
-                <div class="winner">
+            ${isDraw ? `<div class="draw">There is no clear winner</div>` : `<div class="winner">
                     ${winner} approach wins — ${improvement.toFixed(1)}% faster on average
-                </div>
+                </div>`}
 
                 <div class="panel chart-container">
                     <div class="subtle">Performance Comparison (Lower is Better)</div>
                     <div class="bar-chart">
                         <div class="bar" style="height: ${(vStats.avg / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
-                            <div class="bar-value">${vStats.avg.toFixed(1)}ms</div>
+                            <div class="bar-value">${vStats.avg.toFixed(4)}ms</div>
                             <div class="bar-label">Viewport<br>Average</div>
                         </div>
                         <div class="bar resize-bar" style="height: ${(rStats.avg / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
-                            <div class="bar-value">${rStats.avg.toFixed(1)}ms</div>
+                            <div class="bar-value">${rStats.avg.toFixed(4)}ms</div>
                             <div class="bar-label">Resize<br>Average</div>
                         </div>
                         <div class="bar" style="height: ${(vStats.p95 / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
-                            <div class="bar-value">${vStats.p95.toFixed(1)}ms</div>
+                            <div class="bar-value">${vStats.p95.toFixed(4)}ms</div>
                             <div class="bar-label">Viewport<br>95th %ile</div>
                         </div>
                         <div class="bar resize-bar" style="height: ${(rStats.p95 / Math.max(vStats.avg, rStats.avg, vStats.p95, rStats.p95) * 100)}%">
-                            <div class="bar-value">${rStats.p95.toFixed(1)}ms</div>
+                            <div class="bar-value">${rStats.p95.toFixed(4)}ms</div>
                             <div class="bar-label">Resize<br>95th %ile</div>
                         </div>
                     </div>
